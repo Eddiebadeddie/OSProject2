@@ -293,20 +293,17 @@ char string[20];  //string buffer to hold the string
       if(present == false){
         if(debug)
           printf("%s is not present\n", string);
-        int min = 0;  //Initial index, used for comparison in search for LRU
+        int min = 0;
         
-        /*
-          Finds LRU in events
-        */
+
         for(i = 1; i < numFrames; ++i){
-          //When it finds the LRU, replaces min
           if(event[i] < event[min]){
             min = i; 
           }
         }
         if(debug)
           printf("PageTable[%d] was %s ", min, PageTable[min]);
-        strcpy(PageTable[min], string);  //Copies string in the place of LRU
+        strcpy(PageTable[min], string);
         
         if(debug)
           printf("is now %s at %d\n", PageTable[min], eventCounter);
