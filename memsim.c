@@ -12,12 +12,11 @@ typedef int bool;
 #define true 1
 #define false 0
 
-struct CleanDirtyBits
-{
-  bool p1;
-  bool p2;
-  bool clean;
-  bool dirty;
+struct Node {
+	char string[10];
+	bool clean;
+	Node* n;
+	Node *p;
 };
 
 void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug);
@@ -435,7 +434,7 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
   //}
 }
 
-void VMS(FILE *file, char PageTable[][10], int numFrames, bool debug)
+void VMS(FILE *file, int numFrames, bool debug)
 {
   if (numFrames < 4)
   {
@@ -443,219 +442,133 @@ void VMS(FILE *file, char PageTable[][10], int numFrames, bool debug)
     return;
   }
 
-  //Keeps track of where each process begins and ends
-  int limit = numFrames / 2;
+  //The four lists, and a couple of helper node pointers
+  struct Node *A = nullptr;
+  struct Node *B = nullptr;
+  struct Node *C = nullptr;
+  struct Node *D = nullptr;
+  struct Node *cur = nullptr;
+  struct Node *temp = nullptr;
 
-  int A = 0;
-  int B = 0;
+  char string[10];
+  char rw;
 
+  //Keeps track of the number in each of the lists
+  int numA;
+  int numB;
+  
   int RW[2];
   RW[0] = 0;
   RW[1] = 0;
 
-  int i;
-
-  char string[20];
-  char rw;
-
   int eventCounter = 0;
-  int event[numFrames];
-  struct CleanDirtyBits list[numFrames];
 
-  int pageHit;
-  /*
-    Goes through the file and reads in the addresses from the trace file.
-  */
-  while (fscanf(file, "%s %c", &string, &rw) != EOF)
-  {
-    if (debug)
-      printf("Performing %c on %s\n", rw, string);
+  int pageHits = 0;
 
-    bool present = false;
-    int index;
+  //highest number of items in one list
+  int limit = numFrames / 2;
 
-    for (i = 0; i < numFrames; ++i)
-    {
-      if (strcmp(PageTable[i], string) == "0")
-      {
-        present = true;
-        index = i;
-        break;
-      }
-    }
+  while (fscanf(file, "%s %c", &string, &rw) != EOF) {
+	  //If this address belongs to process 1
+	  if (string[0] == '3') {
+		  //If List A is empty
+		  if (A == nullptr) {
+			  //Create a new node with the string
+			  A = (struct Node*) malloc(sizeof(struct Node));
+			  A->string = string;
+			  A->n = nullptr;
+			  A->p = nullptr;
 
-    if (present)
-    {
-      event[index] = eventCounter;
-      ++eventCounter;
-      ++pageHit;
-	  if (rw == 'R' || rw == 'r')
-	  {
-		  RW[0] += 1; //Increments if this was a read operation
-		  list[index].clean = true;
-		  list[index].dirty = false;
+			  //Update the clean or dirty bit
+			  if (rw == 'R') {
+				  A->clean = true;
+				  RW[0] += 1;
+			  }
+			  else if (rw == 'W') {
+				  A->clean = false;
+				  RW[1] += 1;
+			  }
+
+			  ++numA;
+			  ++eventCounter;
+			  continue;
+		  }
+		  else {
+			  //Search the elements in A to find the string
+			  cur = A;
+			  temp == nullptr;
+
+			  //If found, temp != nullptr
+			  while (cur->n != nullptr) {
+				  if (string == cur->string) {
+					  temp = cur;
+				  }
+				  cur = cur->n;
+			  }
+			 
+			  //Not in A, search Clean
+			  if (temp == nullptr) {
+				  cur = C;
+				  if (C != nullptr) {
+					  while (cur->n != nullptr) {
+						  if (string == cur->string) {
+							  temp = cur;
+						  }
+						  cur = cur->n;
+					  }
+				  }
+			  }
+			  else{
+				//It was in A
+				  ++pageHits;
+				  if (rw == 'R')
+					  temp->clean = true;
+				  else if (rw == 'W')
+					  temp->clean = false;
+				  ++eventCounter;
+			  }
+
+			  //Search Dirty for element
+			  if (temp == nullptr) {
+				  cur = D;
+				  if (D != nullptr) {
+					  while (cur->n != nullptr) {
+						  if (string == cur->string) {
+							  temp = cur;
+						  }
+						  cur = cur->n;
+					  }
+				  }
+			  }
+			  else {
+				  //It was in clean
+				  //Is A at the limit?
+					//No - Add to the end of A
+					//Yes - Is B at the limit?
+						//No - place A in either clean or dirty
+						//Yes - FIFO A
+			  }
+
+			  //It was not in Dirty
+			  if (temp == nullptr) {
+				  //Is A at the limit?
+					//No - Add to the end of A
+					//Yes - Is B at the limit?
+						//No - Place A in either clean or dirty and place new node at the end
+						//Yes - FIFO A
+			  }
+			  else {
+				  //It was in dirty
+				  //No - Add to the end of A
+					//Yes - Is B at the limit?
+						//No - place A in either clean or dirty
+						//Yes - FIFO A
+			  }
+		  }
 	  }
-	  else if (rw == 'W' || rw == 'w')
-	  {
-		  RW[1] += 1; //Increments if this was a write operation
-		  list[index].clean = false;
-		  list[index].dirty = true;
-	  }
-      continue;
-    }
-
-    if (strcmp(PageTable[eventCounter % numFrames], "0") == 0)
-    {
-      strcpy(PageTable[eventCounter % numFrames], string);
-
-      if (string[0] == '3')
-      {
-        list[eventCounter % numFrames].p1 = true;
-        list[eventCounter % numFrames].p2 = false;
-        if (A == limit)
-        {
-          int min = event[0];
-          int index = 0;
-          for (i = 1; i < numFrames; ++i)
-          {
-            if (!list[index].p1)
-            {
-              min = event[i];
-              index = i;
-            }
-            if (event[i] < min && list[i].p1)
-            {
-              min = event[i];
-              index = i;
-            }
-          }
-
-          list[index].p1 = false;
-          list[index].p2 = false;
-        }
-        else
-        {
-          ++A;
-        }
-      }
-      else
-      {
-        list[eventCounter % numFrames].p1 = false;
-        list[eventCounter % numFrames].p2 = true;
-        if (B == limit)
-        {
-          int min = event[0];
-          int index = 0;
-          for (i = 1; i < numFrames; ++i)
-          {
-            if (!list[index].p1)
-            {
-              min = event[i];
-              index = i;
-            }
-            if (event[i] < min && list[i].p1)
-            {
-              min = event[i];
-              index = i;
-            }
-          }
-
-          list[index].p1 = false;
-          list[index].p2 = false;
-          if (rw == 'R' || rw == 'r')
-          {
-            list[index].clean = true;
-            list[index].dirty = false;
-          }
-          else if (rw == 'W' | rw = 'w')
-          {
-            list[index].clean = false;
-            list[index].dirty = true;
-          }
-        }
-        else
-        {
-          ++B;
-        }
-      }
-      event[eventCounter % numFrames] = eventCounter;
-    }
-    else
-    {
-		int min = event[0];
-		int index = 0;
-		bool clean = false;
-		bool dirty = false;
-
-		bool p1 = string[0] == '3';
-
-		if (A == limit && B == limit) {
-			for (i = 0; i < numFrames; ++i) {
-				if (event[i] < min) {
-					if (p1 && list[i].p1) {
-						min = event[i];
-						index = i;
-					}
-					else if (!p1 && list[i].p2) {
-						min = event[i];
-						index = i;
-					}
-				}
-			}
-
-			strcpy(PageTable[index], string);
-			event[index] = eventCounter;
-		}
-
-		
-
-		for (i = 0; i < numFrames; ++i)
-		{
-			if (list[i].clean)
-			{
-			if (min > event[i])
-			{
-				min = event[i];
-				index = i;
-				clean = true;
-			}
-			}
-		}
-
-		if (clean)
-		{
-			if (PageTable[index][0] == '3')
-			{
-			list[index].p1 = true;
-			list[index].p2 = false;
-			}
-			else
-			{
-			list[index].p1 = false;
-			list[index].p2 = true;
-			}
-			list[eventCounter % numFrames].p1 = false;
-			list[eventCounter % numFrames].p2 = false;
-			event[index] = eventCounter;
-		}
-      
-    }
-
-    if (rw == 'R' || rw == 'r')
-    {
-      RW[0] += 1; //Increments if this was a read operation
-      list[eventCounter % numFrames].clean = true;
-      list[eventCounter % numFrames].dirty = false;
-    }
-    else if (rw == 'W' || rw == 'w')
-    {
-      RW[1] += 1; //Increments if this was a write operation
-      list[eventCounter % numFrames].clean = false;
-      list[eventCounter % numFrames].dirty = true;
-    }
-
-    ++eventCounter;
+	  //^^Same shit but for B 
   }
+
 
   printf("total memory frames: %d\n", numFrames);
   printf("events in trace: %d\n", eventCounter);
@@ -669,3 +582,78 @@ void VMS(FILE *file, char PageTable[][10], int numFrames, bool debug)
     printf("hit rate: %f %%", percentage * 100);
   }
 }
+
+/*
+//If not found in A and A has room, add new node at end of list
+			  if (temp == nullptr && numA < limit) {
+				  temp = (struct Node*) malloc(sizeof(struct Node));
+				  temp->string = string;
+				  if (rw == 'R')
+					  temp->clean = true;
+				  else if (rw == 'W')
+					  temp->clean = false;
+				  temp->n = nullptr;
+				  temp->p = cur;
+				  cur->n = temp;
+				  ++numA;
+			  }
+			  else if (temp == nullptr && numA == limit) {
+				  //If not found in A but A has no room
+				  if (numB < limit) {
+					  //Check clean
+					  cur = C;
+					  while (cur->next != nullptr) {
+
+					  }
+
+					  //Check Dirty
+
+					  A = A->n;
+					  if (A->clean) {
+						  C = A->p;
+						  C->n = nullptr;
+						  A->p = nullptr;
+					  }
+					  else {
+						  D = A->p;
+						  D->n = nullptr;
+						  A->p = nullptr;
+					  }
+
+					  cur = A;
+					  while (cur->n != nullptr) {
+						  cur = cur->n;
+					  }
+
+					  temp = (struct Node*) malloc(sizeof(struct Node));
+					  temp->string = string;
+					  temp->n = nullptr;
+					  temp->p = cur;
+					  cur->n = temp;
+				  }
+				  else if (numB == limit) {
+					  cur = A;
+					  while (cur->next != nullptr) {
+						  cur = cur->n;
+					  }
+
+					  temp = A;
+					  A = A->n;
+					  A->p = nullptr;
+
+					  temp->n = nullptr;
+					  free(temp);
+
+					  temp = (struct Node*) malloc(sizeof(struct Node));
+					  temp->string = string;
+					  if (rw == 'R')
+						  temp->clean = true;
+					  else if (rw == 'W')
+						  temp->clean = false;
+					  temp->n = false;
+					  temp->p = cur;
+					  cur->n = temp;
+
+				  }
+			  }
+*/
