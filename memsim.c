@@ -435,7 +435,7 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
   //}
 }
 
-void VMS(FILE *file, char PageTable[][100], int numFrames, bool debug)
+void VMS(FILE *file, char PageTable[][10], int numFrames, bool debug)
 {
   if (numFrames < 4)
   {
@@ -486,9 +486,21 @@ void VMS(FILE *file, char PageTable[][100], int numFrames, bool debug)
 
     if (present)
     {
-      event[i] = eventCounter;
+      event[index] = eventCounter;
       ++eventCounter;
       ++pageHit;
+	  if (rw == 'R' || rw == 'r')
+	  {
+		  RW[0] += 1; //Increments if this was a read operation
+		  list[index].clean = true;
+		  list[index].dirty = false;
+	  }
+	  else if (rw == 'W' || rw == 'w')
+	  {
+		  RW[1] += 1; //Increments if this was a write operation
+		  list[index].clean = false;
+		  list[index].dirty = true;
+	  }
       continue;
     }
 
@@ -570,57 +582,63 @@ void VMS(FILE *file, char PageTable[][100], int numFrames, bool debug)
     }
     else
     {
-      printf("Table is full\n");
+		int min = event[0];
+		int index = 0;
+		bool clean = false;
+		bool dirty = false;
 
-      bool present;
+		bool p1 = string[0] == '3';
 
-      for (i = 0; i < numFrames; ++i)
-      {
-        if (strcmp(PageTable[eventCounter % numFrames], string) == 0)
-        {
-          present = true;
-          ++pageHit;
-          break;
-        }
-      }
+		if (A == limit && B == limit) {
+			for (i = 0; i < numFrames; ++i) {
+				if (event[i] < min) {
+					if (p1 && list[i].p1) {
+						min = event[i];
+						index = i;
+					}
+					else if (!p1 && list[i].p2) {
+						min = event[i];
+						index = i;
+					}
+				}
+			}
 
-      if (!present)
-      {
-        int min = event[0];
-        int index = 0;
-        bool clean = false;
-        bool dirty = false;
+			strcpy(PageTable[index], string);
+			event[index] = eventCounter;
+		}
 
-        for (i = 0; i < numFrames; ++i)
-        {
-          if (list[i].clean)
-          {
-            if (min > event[i])
-            {
-              min = event[i];
-              index = i;
-              clean = true;
-            }
-          }
-        }
+		
 
-        if (clean)
-        {
-          if (PageTable[index][0] == '3')
-          {
-            list[index].p1 = true;
-            list[index].p2 = false;
-          }
-          else
-          {
-            list[index].p1 = false;
-            list[index].p2 = true;
-          }
-          list[eventCounter % numFrames].p1 = false;
-          list[eventCounter % numFrames].p2 = false;
-          event[index] = eventCounter;
-        }
-      }
+		for (i = 0; i < numFrames; ++i)
+		{
+			if (list[i].clean)
+			{
+			if (min > event[i])
+			{
+				min = event[i];
+				index = i;
+				clean = true;
+			}
+			}
+		}
+
+		if (clean)
+		{
+			if (PageTable[index][0] == '3')
+			{
+			list[index].p1 = true;
+			list[index].p2 = false;
+			}
+			else
+			{
+			list[index].p1 = false;
+			list[index].p2 = true;
+			}
+			list[eventCounter % numFrames].p1 = false;
+			list[eventCounter % numFrames].p2 = false;
+			event[index] = eventCounter;
+		}
+      
     }
 
     if (rw == 'R' || rw == 'r')
