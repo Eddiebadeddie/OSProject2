@@ -12,16 +12,23 @@ typedef int bool;
 #define true 1
 #define false 0
 
-struct Node {
-	char string[10];
-	bool clean;
-	Node* n;
-	Node *p;
+struct Node
+{
+  char string[10];
+  bool clean;
+  struct Node *n;
+  struct Node *p;
 };
 
 void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug);
 void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug);
-void VMS(FILE *file, char PageTable[][100], int numFrames, bool debug);
+void VMS(FILE *file, int numFrames, bool debug);
+
+struct Node *FindLastNode(struct Node *cur);
+struct Node *FindPage(struct Node *cur, char string[10]);
+struct Node *AddToList(struct Node *add, struct Node *list);
+struct Node *RemoveFromList(struct Node *remove, struct Node *list);
+void UpdateRW(struct Node *node, int *RW, char rw);
 
 int main(int argc, char *argv[])
 {
@@ -181,7 +188,7 @@ void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug)
 
     for (i = 0; i < numFrames; ++i)
     {
-      if (strcmp(PageTable[i], string) == "0")
+      if (strcmp(PageTable[i], "0") == 0)
       {
         present = true;
         index = i;
@@ -327,7 +334,7 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
 
     for (i = 0; i < numFrames; ++i)
     {
-      if (strcmp(PageTable[i], string) == "0")
+      if (strcmp(PageTable[i], "0") == 0)
       {
         present = true;
         index = i;
@@ -443,12 +450,12 @@ void VMS(FILE *file, int numFrames, bool debug)
   }
 
   //The four lists, and a couple of helper node pointers
-  struct Node *A = nullptr;
-  struct Node *B = nullptr;
-  struct Node *C = nullptr;
-  struct Node *D = nullptr;
-  struct Node *cur = nullptr;
-  struct Node *temp = nullptr;
+  struct Node *A = NULL;
+  struct Node *B = NULL;
+  struct Node *C = NULL;
+  struct Node *D = NULL;
+  struct Node *cur = NULL;
+  struct Node *temp = NULL;
 
   char string[10];
   char rw;
@@ -456,7 +463,7 @@ void VMS(FILE *file, int numFrames, bool debug)
   //Keeps track of the number in each of the lists
   int numA;
   int numB;
-  
+
   int RW[2];
   RW[0] = 0;
   RW[1] = 0;
@@ -467,142 +474,322 @@ void VMS(FILE *file, int numFrames, bool debug)
 
   //highest number of items in one list
   int limit = numFrames / 2;
+  int total = numFrames;
+  while (fscanf(file, "%s %c", &string, &rw) != EOF)
+  {
+    //If this address belongs to process 1
+    if (string[0] == '3')
+    {
+      //If List A is empty
+      if (A == NULL)
+      {
+        //Create a new node with the string
+        A = (struct Node *)malloc(sizeof(struct Node));
+        strcpy(A->string, string);
+        A = AddToList(A, A);
 
-  while (fscanf(file, "%s %c", &string, &rw) != EOF) {
-	  //If this address belongs to process 1
-	  if (string[0] == '3') {
-		  //If List A is empty
-		  if (A == nullptr) {
-			  //Create a new node with the string
-			  A = (struct Node*) malloc(sizeof(struct Node));
-			  A->string = string;
-			  A->n = nullptr;
-			  A->p = nullptr;
+        //Update the clean or dirty bit
+        UpdateRW(A, RW, rw);
 
-			  //Update the clean or dirty bit
-			  if (rw == 'R') {
-				  A->clean = true;
-				  RW[0] += 1;
-			  }
-			  else if (rw == 'W') {
-				  A->clean = false;
-				  RW[1] += 1;
-			  }
+        ++numA;
+        ++eventCounter;
+        --total;
+        continue;
+      }
+      else
+      {
+        //Search the elements in A to find the string
+        temp = FindPage(A, string);
 
-			  ++numA;
-			  ++eventCounter;
-			  continue;
-		  }
-		  else {
-			  //Search the elements in A to find the string
-			  cur = A;
-			  temp == nullptr;
+        //Not in A, search Clean
+        if (temp == NULL)
+        {
+          temp = FindPage(C, string);
+        }
+        else
+        {
+          //It was in A
+          ++pageHits;
+          UpdateRW(A, RW, rw);
+          ++eventCounter;
+        }
 
-			  //If found, temp != nullptr
-			  while (cur->n != nullptr) {
-				  if (string == cur->string) {
-					  temp = cur;
-				  }
-				  cur = cur->n;
-			  }
-			 
-			  //Not in A, search Clean
-			  if (temp == nullptr) {
-				  cur = C;
-				  if (C != nullptr) {
-					  while (cur->n != nullptr) {
-						  if (string == cur->string) {
-							  temp = cur;
-						  }
-						  cur = cur->n;
-					  }
-				  }
-			  }
-			  else{
-				//It was in A
-				  ++pageHits;
-				  if (rw == 'R')
-					  temp->clean = true;
-				  else if (rw == 'W')
-					  temp->clean = false;
-				  ++eventCounter;
-			  }
+        //Search Dirty for element
+        if (temp == NULL)
+        {
+          temp = FindPage(D, string);
+        }
+        else
+        {
+          //It was in clean
+          //Is A at the limit?
+          //No - Add to the end of A
+          if (numA < limit)
+          {
+            cur = RemoveFromList(temp, C);
+            A = AddToList(cur, A);
+            ++numA;
+          }
+          else
+          {
+            //Yes - FIFO A
+            cur = RemoveFromList(A, A);
+            if (cur->clean)
+            {
+              C = AddToList(cur, C);
+            }
+            else
+            {
+              D = AddToList(cur, D);
+            }
+            temp = RemoveFromList(temp, C);
+            temp = AddToList(temp, A);
+          }
+        }
 
-			  //Search Dirty for element
-			  if (temp == nullptr) {
-				  cur = D;
-				  if (D != nullptr) {
-					  while (cur->n != nullptr) {
-						  if (string == cur->string) {
-							  temp = cur;
-						  }
-						  cur = cur->n;
-					  }
-				  }
-			  }
-			  else {
-				  //It was in clean
-				  //Is A at the limit?
-					//No - Add to the end of A
-					//Yes - Is B at the limit?
-						//No - place A in either clean or dirty
-						//Yes - FIFO A
-			  }
+        //It was not in Dirty
+        if (temp == NULL)
+        {
+          temp = (struct Node *)malloc(sizeof(struct Node));
+          strcpy(temp->string, string);
+          UpdateRW(temp, RW, rw);
 
-			  //It was not in Dirty
-			  if (temp == nullptr) {
-				  //Is A at the limit?
-					//No - Add to the end of A
-					//Yes - Is B at the limit?
-						//No - Place A in either clean or dirty and place new node at the end
-						//Yes - FIFO A
-			  }
-			  else {
-				  //It was in dirty
-				  //No - Add to the end of A
-					//Yes - Is B at the limit?
-						//No - place A in either clean or dirty
-						//Yes - FIFO A
-			  }
-		  }
-	  }
-	  //^^Same shit but for B 
+          //Is A at the limit?
+          //No - Add to the end of A
+          if (numA < limit)
+          {
+            A = AddToList(temp, A);
+            ++numA;
+            --total;
+          }
+          //Yes - Is table full?
+          else
+          {
+            //No - FIFO A into Clean or Dirty
+            if (total > 0)
+            {
+              cur = RemoveFromList(A, A);
+              if (cur->clean)
+              {
+                C = AddToList(cur, C);
+              }
+              else
+              {
+                D = AddToList(cur, D);
+              }
+
+              A = AddToList(temp, A);
+            }
+            //Yes - Check if the clean and dirty are empty
+            else
+            {
+              //If C = null and D = null completely full
+              if (C == NULL && D == NULL)
+              {
+                //FIFO A
+                cur = RemoveFromList(A, A);
+                free(cur);
+                A = AddToList(temp, A);
+              }
+              else if (C == NULL)
+              {
+                //Evict first D abd FIFO A
+                cur = RemoveFromList(D, D);
+                free(cur);
+
+                cur = RemoveFromList(A, A);
+                if (cur->clean)
+                {
+                  C = AddToList(cur, C);
+                }
+                else
+                {
+                  D = AddToList(cur, D);
+                }
+
+                A = AddToList(temp, A);
+              }
+              else
+              {
+                //Evict first C and FIFO A
+                cur = RemoveFromList(C, C);
+                free(C);
+
+                cur = RemoveFromList(A, A);
+                if (cur->clean)
+                {
+                  C = AddToList(cur, C);
+                }
+                else
+                {
+                  D = AddToList(cur, D);
+                }
+                A = AddToList(temp, A);
+              }
+            }
+          }
+        }
+        else
+        {
+          //It was in dirty
+          //Is A full?
+          if (numA < limit)
+          {
+            //No- Add to end of A
+            A = AddToList(temp, A);
+            ++numA;
+            --total;
+            UpdateRW(temp, RW, rw);
+          }
+          //Yes - FIFO A and Add temp to end of A
+          else
+          {
+            temp = RemoveFromList(temp, D);
+            cur = RemoveFromList(A, A);
+            A = AddToList(temp, A);
+
+            if (cur->clean)
+            {
+              C = AddToList(cur, C);
+            }
+            else
+            {
+              D = AddToList(cur, D);
+            }
+          }
+        }
+      }
+    }
+    //^^Same shit but for B
   }
-
 
   printf("total memory frames: %d\n", numFrames);
   printf("events in trace: %d\n", eventCounter);
   printf("total disk reads: %d\n", RW[0]);
   printf("total disk writes: %d\n", RW[1]);
 
-  double percentage = (double)pageHit / (double)eventCounter;
+  double percentage = (double)pageHits / (double)eventCounter;
   if (debug)
   {
-    printf("page hits: %d\n", pageHit);
+    printf("page hits: %d\n", pageHits);
     printf("hit rate: %f %%", percentage * 100);
   }
 }
 
+struct Node *FindLastNode(struct Node *cur)
+{
+  if (cur == NULL)
+  {
+    return cur;
+  }
+  while (cur->n != NULL)
+  {
+    cur = cur->n;
+  }
+  return cur;
+}
+
+struct Node *FindPage(struct Node *cur, char string[10])
+{
+  if (cur == NULL)
+  {
+    return cur;
+  }
+
+  while (cur != NULL)
+  {
+    if (strcmp(cur->string, string) == 0)
+    {
+      return cur;
+    }
+    cur = cur->n;
+  }
+
+  return cur;
+}
+
+struct Node *AddToList(struct Node *add, struct Node *list)
+{
+  if (list == NULL)
+  {
+    list = add;
+    list->n = NULL;
+    list->p = NULL;
+  }
+  else
+  {
+    struct Node *cur = FindLastNode(list);
+    cur->n = add;
+    add->n = NULL;
+    add->p = cur;
+  }
+
+  return list;
+}
+
+struct Node *RemoveFromList(struct Node *remove, struct Node *list)
+{
+  if (remove->p == NULL && remove->n == NULL)
+  {
+    list = remove->n;
+    return remove;
+  }
+  else if (remove->p == NULL)
+  {
+    list = remove->n;
+    remove->n = NULL;
+    list->p = NULL;
+    return remove;
+  }
+  else if (remove->n == NULL)
+  {
+    remove->p->n = NULL;
+    remove->p = NULL;
+    return remove;
+  }
+  else
+  {
+    remove->p->n = remove->n;
+    remove->n->p = remove->p;
+    remove->p = NULL;
+    remove->n = NULL;
+  }
+  return remove;
+}
+
+void UpdateRW(struct Node *node, int *RW, char rw)
+{
+  if (rw == 'R')
+  {
+    node->clean = true;
+    RW[0] += 1;
+  }
+  else if (rw == 'W')
+  {
+    node->clean = false;
+    RW[1] += 1;
+  }
+}
 /*
 //If not found in A and A has room, add new node at end of list
-			  if (temp == nullptr && numA < limit) {
+			  if (temp == NULL && numA < limit) {
 				  temp = (struct Node*) malloc(sizeof(struct Node));
 				  temp->string = string;
 				  if (rw == 'R')
 					  temp->clean = true;
 				  else if (rw == 'W')
 					  temp->clean = false;
-				  temp->n = nullptr;
+				  temp->n = NULL;
 				  temp->p = cur;
 				  cur->n = temp;
 				  ++numA;
 			  }
-			  else if (temp == nullptr && numA == limit) {
+			  else if (temp == NULL && numA == limit) {
 				  //If not found in A but A has no room
 				  if (numB < limit) {
 					  //Check clean
 					  cur = C;
-					  while (cur->next != nullptr) {
+					  while (cur->next != NULL) {
 
 					  }
 
@@ -611,37 +798,37 @@ void VMS(FILE *file, int numFrames, bool debug)
 					  A = A->n;
 					  if (A->clean) {
 						  C = A->p;
-						  C->n = nullptr;
-						  A->p = nullptr;
+						  C->n = NULL;
+						  A->p = NULL;
 					  }
 					  else {
 						  D = A->p;
-						  D->n = nullptr;
-						  A->p = nullptr;
+						  D->n = NULL;
+						  A->p = NULL;
 					  }
 
 					  cur = A;
-					  while (cur->n != nullptr) {
+					  while (cur->n != NULL) {
 						  cur = cur->n;
 					  }
 
 					  temp = (struct Node*) malloc(sizeof(struct Node));
 					  temp->string = string;
-					  temp->n = nullptr;
+					  temp->n = NULL;
 					  temp->p = cur;
 					  cur->n = temp;
 				  }
 				  else if (numB == limit) {
 					  cur = A;
-					  while (cur->next != nullptr) {
+					  while (cur->next != NULL) {
 						  cur = cur->n;
 					  }
 
 					  temp = A;
 					  A = A->n;
-					  A->p = nullptr;
+					  A->p = NULL;
 
-					  temp->n = nullptr;
+					  temp->n = NULL;
 					  free(temp);
 
 					  temp = (struct Node*) malloc(sizeof(struct Node));
