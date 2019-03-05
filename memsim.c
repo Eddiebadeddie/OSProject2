@@ -492,9 +492,7 @@ void VMS(FILE *file, int numFrames, bool debug)
         UpdateRW(A, RW, rw);
 
         ++numA;
-        ++eventCounter;
         --total;
-        continue;
       }
       else
       {
@@ -511,7 +509,6 @@ void VMS(FILE *file, int numFrames, bool debug)
           //It was in A
           ++pageHits;
           UpdateRW(A, RW, rw);
-          ++eventCounter;
         }
 
         //Search Dirty for element
@@ -660,7 +657,18 @@ void VMS(FILE *file, int numFrames, bool debug)
         }
       }
     }
-    //^^Same shit but for B
+    //This is a B Process
+    //Is B empty?
+    if (B == NULL)
+    {
+      //Yes
+      B = (struct Node *)malloc(sizeof(struct Node));
+      strcpy(B->string, string);
+      UpdateRW(B, RW, rw);
+      ++numB;
+      --total;
+    }
+    ++eventCounter;
   }
 
   printf("total memory frames: %d\n", numFrames);
