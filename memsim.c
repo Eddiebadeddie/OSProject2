@@ -12,6 +12,14 @@ typedef int bool;
 #define true 1
 #define false 0
 
+struct CleanDirtyBits
+{
+  bool p1;
+  bool p2;
+  bool clean;
+  bool dirty;
+};
+
 void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug);
 void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug);
 void VMS(FILE *file, char PageTable[][100], int numFrames, bool debug);
@@ -169,6 +177,27 @@ void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug)
       If the value of the page table at the given index is the initialized value, then
       store the string in the page table.
     */
+    bool present = false;
+    int index;
+
+    for (i = 0; i < numFrames; ++i)
+    {
+      if (strcmp(PageTable[i], string) == "0")
+      {
+        present = true;
+        index = i;
+        break;
+      }
+    }
+
+    if (present)
+    {
+      event[i] = eventCounter;
+      ++eventCounter;
+      ++pageHit;
+      continue;
+    }
+
     if (strcmp(PageTable[eventCounter % numFrames], "0") == 0)
     {
       strcpy(PageTable[eventCounter % numFrames], string);
@@ -185,16 +214,13 @@ void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug)
         printf("Table is full\n");
       }
 
-      bool present = false; //Determines if the string is already in memory
+      present = false; //Determines if the string is already in memory
 
       /*
         Goes through all of the entries in the page table
       */
       for (i = 0; i < numFrames; ++i)
       {
-        if (debug)
-          printf("Checking PageTable[%d]\n", i);
-
         //If the entry in the page table is the same as the string, then page hit
         if (strcmp(PageTable[i], string) == 0)
         {
@@ -259,11 +285,13 @@ void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug)
   printf("events in trace: %d\n", eventCounter);
   printf("total disk reads: %d\n", RW[0]);
   printf("total disk writes: %d\n", RW[1]);
-  if (debug)
-  {
-    printf("page hits: %d\n", pageHit);
-    printf("hit rate: %x %", (pageHit / eventCounter) * 100);
-  }
+
+  double percentage = (double)pageHit / (double)eventCounter;
+  //if (debug)
+  //{
+  printf("page hits: %d\n", pageHit);
+  printf("hit rate: %f %%", percentage * 100);
+  //}
 }
 
 void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
@@ -294,6 +322,28 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
       If the value of the page table at the given index is the initialized value, then
       store the string in the page table.
     */
+
+    bool present = false;
+    int index;
+
+    for (i = 0; i < numFrames; ++i)
+    {
+      if (strcmp(PageTable[i], string) == "0")
+      {
+        present = true;
+        index = i;
+        break;
+      }
+    }
+
+    if (present)
+    {
+      event[i] = eventCounter;
+      ++eventCounter;
+      ++pageHit;
+      continue;
+    }
+
     if (strcmp(PageTable[eventCounter % numFrames], "0") == 0)
     {
       strcpy(PageTable[eventCounter % numFrames], string);
@@ -317,9 +367,6 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
       */
       for (i = 0; i < numFrames; ++i)
       {
-        if (debug)
-          printf("Checking PageTable[%d]\n", i);
-
         //If the entry in the page table is the same as the string, then page hit
         if (strcmp(PageTable[i], string) == 0)
         {
@@ -379,11 +426,13 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
   printf("events in trace: %d\n", eventCounter);
   printf("total disk reads: %d\n", RW[0]);
   printf("total disk writes: %d\n", RW[1]);
-  if (debug)
-  {
-    printf("page hits: %d\n", pageHit);
-    printf("hit rate: %x %", (pageHit / eventCounter) * 100);
-  }
+
+  double percentage = (double)pageHit / (double)eventCounter;
+  //if (debug)
+  //{
+  printf("page hits: %d\n", pageHit);
+  printf("hit rate: %f %%", percentage * 100);
+  //}
 }
 
 void VMS(FILE *file, char PageTable[][100], int numFrames, bool debug)
@@ -392,5 +441,213 @@ void VMS(FILE *file, char PageTable[][100], int numFrames, bool debug)
   {
     printf("Error: Cannot perform this action with less than 4 frames.\n");
     return;
+  }
+
+  //Keeps track of where each process begins and ends
+  int limit = numFrames / 2;
+
+  int A = 0;
+  int B = 0;
+
+  int RW[2];
+  RW[0] = 0;
+  RW[1] = 0;
+
+  int i;
+
+  char string[20];
+  char rw;
+
+  int eventCounter = 0;
+  int event[numFrames];
+  struct CleanDirtyBits list[numFrames];
+
+  int pageHit;
+  /*
+    Goes through the file and reads in the addresses from the trace file.
+  */
+  while (fscanf(file, "%s %c", &string, &rw) != EOF)
+  {
+    if (debug)
+      printf("Performing %c on %s\n", rw, string);
+
+    bool present = false;
+    int index;
+
+    for (i = 0; i < numFrames; ++i)
+    {
+      if (strcmp(PageTable[i], string) == "0")
+      {
+        present = true;
+        index = i;
+        break;
+      }
+    }
+
+    if (present)
+    {
+      event[i] = eventCounter;
+      ++eventCounter;
+      ++pageHit;
+      continue;
+    }
+
+    if (strcmp(PageTable[eventCounter % numFrames], "0") == 0)
+    {
+      strcpy(PageTable[eventCounter % numFrames], string);
+
+      if (string[0] == '3')
+      {
+        list[eventCounter % numFrames].p1 = true;
+        list[eventCounter % numFrames].p2 = false;
+        if (A == limit)
+        {
+          int min = event[0];
+          int index = 0;
+          for (i = 1; i < numFrames; ++i)
+          {
+            if (!list[index].p1)
+            {
+              min = event[i];
+              index = i;
+            }
+            if (event[i] < min && list[i].p1)
+            {
+              min = event[i];
+              index = i;
+            }
+          }
+
+          list[index].p1 = false;
+          list[index].p2 = false;
+        }
+        else
+        {
+          ++A;
+        }
+      }
+      else
+      {
+        list[eventCounter % numFrames].p1 = false;
+        list[eventCounter % numFrames].p2 = true;
+        if (B == limit)
+        {
+          int min = event[0];
+          int index = 0;
+          for (i = 1; i < numFrames; ++i)
+          {
+            if (!list[index].p1)
+            {
+              min = event[i];
+              index = i;
+            }
+            if (event[i] < min && list[i].p1)
+            {
+              min = event[i];
+              index = i;
+            }
+          }
+
+          list[index].p1 = false;
+          list[index].p2 = false;
+          if (rw == 'R' || rw == 'r')
+          {
+            list[index].clean = true;
+            list[index].dirty = false;
+          }
+          else if (rw == 'W' | rw = 'w')
+          {
+            list[index].clean = false;
+            list[index].dirty = true;
+          }
+        }
+        else
+        {
+          ++B;
+        }
+      }
+      event[eventCounter % numFrames] = eventCounter;
+    }
+    else
+    {
+      printf("Table is full\n");
+
+      bool present;
+
+      for (i = 0; i < numFrames; ++i)
+      {
+        if (strcmp(PageTable[eventCounter % numFrames], string) == 0)
+        {
+          present = true;
+          ++pageHit;
+          break;
+        }
+      }
+
+      if (!present)
+      {
+        int min = event[0];
+        int index = 0;
+        bool clean = false;
+        bool dirty = false;
+
+        for (i = 0; i < numFrames; ++i)
+        {
+          if (list[i].clean)
+          {
+            if (min > event[i])
+            {
+              min = event[i];
+              index = i;
+              clean = true;
+            }
+          }
+        }
+
+        if (clean)
+        {
+          if (PageTable[index][0] == '3')
+          {
+            list[index].p1 = true;
+            list[index].p2 = false;
+          }
+          else
+          {
+            list[index].p1 = false;
+            list[index].p2 = true;
+          }
+          list[eventCounter % numFrames].p1 = false;
+          list[eventCounter % numFrames].p2 = false;
+          event[index] = eventCounter;
+        }
+      }
+    }
+
+    if (rw == 'R' || rw == 'r')
+    {
+      RW[0] += 1; //Increments if this was a read operation
+      list[eventCounter % numFrames].clean = true;
+      list[eventCounter % numFrames].dirty = false;
+    }
+    else if (rw == 'W' || rw == 'w')
+    {
+      RW[1] += 1; //Increments if this was a write operation
+      list[eventCounter % numFrames].clean = false;
+      list[eventCounter % numFrames].dirty = true;
+    }
+
+    ++eventCounter;
+  }
+
+  printf("total memory frames: %d\n", numFrames);
+  printf("events in trace: %d\n", eventCounter);
+  printf("total disk reads: %d\n", RW[0]);
+  printf("total disk writes: %d\n", RW[1]);
+
+  double percentage = (double)pageHit / (double)eventCounter;
+  if (debug)
+  {
+    printf("page hits: %d\n", pageHit);
+    printf("hit rate: %f %%", percentage * 100);
   }
 }
