@@ -350,7 +350,6 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames)
 
     if (present)
     {
-      event[i] = eventCounter;
       ++eventCounter;
       ++pageHit;
       continue;
@@ -536,7 +535,7 @@ void VMS(FILE *file, int numFrames)
         else
         {
           if(debug)
-            printf("Yes\n");
+            printf("HIT\n");
           //It was in A
           ++pageHits;
           UpdateRW(A, RW, rw);
@@ -596,6 +595,7 @@ void VMS(FILE *file, int numFrames)
                 printf("DIRTY\n");
               D = AddToList(cur, D);
             }
+
             temp = RemoveFromList(temp, C);
             temp = AddToList(temp, A);
             UpdateRW(temp, RW, rw);
@@ -605,17 +605,28 @@ void VMS(FILE *file, int numFrames)
           continue;
         }
 
+        if(debug)
+          printf("Was it in Dirty? >");
         //It was not in Dirty
         if (temp == NULL)
         {
+          if(debug){
+            printf("No\n");
+          }
           temp = (struct Node *)malloc(sizeof(struct Node));
+
+          if(debug)
+            printf("Created a new node\n");
+
           strcpy(temp->string, string);
           UpdateRW(temp, RW, rw);
 
           //Is A at the limit?
           //No - Add to the end of A
+          if(debug)
+            printf("%d / %d in A\n", numA, limit);
           if (numA < limit)
-          {
+          {            
             A = AddToList(temp, A);
             ++numA;
             --total;
@@ -623,9 +634,13 @@ void VMS(FILE *file, int numFrames)
           //Yes - Is table full?
           else
           {
+            if(debug)
+              printf("Is the table full? >");
             //No - FIFO A into Clean or Dirty
             if (total > 0)
             {
+              if(debug)
+                printf("No, performing FIFO on A");
               cur = RemoveFromList(A, A);
               if (cur->clean)
               {
@@ -641,9 +656,14 @@ void VMS(FILE *file, int numFrames)
             //Yes - Check if the clean and dirty are empty
             else
             {
+              if(debug)
+                printf("Yes\n");
               //If C = null and D = null completely full
               if (C == NULL && D == NULL)
               {
+                if(debug)
+                  printf("CLEAN and DIRTY are empty, regular FIFO\n");
+
                 //FIFO A
                 cur = RemoveFromList(A, A);
                 free(cur);
@@ -651,6 +671,8 @@ void VMS(FILE *file, int numFrames)
               }
               else if (C == NULL)
               {
+                if(debug)
+                  printf("Evicting DIRTY and FIFO on A\n");
                 //Evict first D abd FIFO A
                 cur = RemoveFromList(D, D);
                 free(cur);
@@ -670,6 +692,8 @@ void VMS(FILE *file, int numFrames)
               else
               {
                 //Evict first C and FIFO A
+                if(debug)
+                  printf("Evicting from C and FIFO on A\n");
                 cur = RemoveFromList(C, C);
                 free(C);
 
@@ -691,6 +715,8 @@ void VMS(FILE *file, int numFrames)
         {
           //It was in dirty
           //Is A full?
+          if(debug)
+            printf("Yes\n%d / %d in A\n", numA, limit);
           if (numA < limit)
           {
             //No- Add to end of A
@@ -698,10 +724,15 @@ void VMS(FILE *file, int numFrames)
             ++numA;
             --total;
             UpdateRW(temp, RW, rw);
+            if(debug)
+              printf("Added to A\n");
           }
           //Yes - FIFO A and Add temp to end of A
           else
           {
+            if(debug)
+              printf("Removing from Dirty and FIFO A\n");
+
             temp = RemoveFromList(temp, D);
             cur = RemoveFromList(A, A);
             A = AddToList(temp, A);
@@ -743,16 +774,20 @@ void VMS(FILE *file, int numFrames)
       }
       else{
         if(debug)
-          printf("B is not empty\n");
+          printf("Searching in B\n");
         temp = FindPage(B, string);
 
         //Is the page in the list?
         if(temp == NULL){
           //No- Check for it in Clean
+          if(debug)
+            printf("Searching in Clean:\n");
           temp = FindPage(C, string);
         }
         else{
           //Yes - It is in the list
+          if(debug)
+            printf("HIT\n");
           ++pageHits;
           UpdateRW(temp, RW, rw);
           ++eventCounter;
@@ -762,13 +797,19 @@ void VMS(FILE *file, int numFrames)
         //Is it in Clean?
         if(temp == NULL){
           //No - Check Dirty
+          if(debug)
+            printf("Checking Dirty\n");
           temp = FindPage(D, string);
         }
         else{
           //It is in Clean
           //Is B full?
+          if(debug)
+            printf("Found in Clean\n");
           if(numB < limit){
             //No
+            if(debug)
+              printf("B is not full\n");
             temp = RemoveFromList(temp, C);
             B = AddToList(temp, B);
             UpdateRW(temp, RW, rw);
@@ -777,6 +818,8 @@ void VMS(FILE *file, int numFrames)
           }
           else{
             //Yes
+            if(debug)
+              printf("B is full\n");
             temp = RemoveFromList(temp, C);
             cur = RemoveFromList(B, B);
             B = AddToList(temp, B);
@@ -795,6 +838,8 @@ void VMS(FILE *file, int numFrames)
           //Is it in Dirty?
         if(temp == NULL){
           //No
+          if(debug)
+            printf("Not found in any lists\n");
           temp = (struct Node*) malloc (sizeof(struct Node));
           strcpy(temp->string, string);
           UpdateRW(temp, RW, rw);
@@ -803,6 +848,8 @@ void VMS(FILE *file, int numFrames)
           //Is B full?
           if(numB < limit){
             //No - add at the end of the list
+            if(debug)
+              printf("B is not full, adding to the end of the list\n");
             B = AddToList(temp, B);
             ++eventCounter;
             ++numB;
@@ -810,22 +857,30 @@ void VMS(FILE *file, int numFrames)
           }
           else{
             //B is full- Is there room in the table?
+            if(debug)
+              printf("B is full\n");
             if(total > 0){
               //Yes
+              if(debug)
+                printf("Table has space\n");
               cur = RemoveFromList(B, B);
               B = AddToList(temp,B);
-
+              printf("Placing B into ");
               if(cur->clean){
+                printf("CLEAN\n");
                 C = AddToList(cur, C);
               }
               else{
                 D = AddToList(cur, D);
+                printf("CLEAN\n");
               }
             }
             else{
               //There is no room on the table
               //If C and D are empty, FIFO B
               if(C == NULL && D == NULL){
+                if(debug)
+                  printf("FIFO on B\n");
                 cur = RemoveFromList(B, B);
                 free (cur);
                 B = AddToList(temp, B);
@@ -834,6 +889,8 @@ void VMS(FILE *file, int numFrames)
               }
               else if( C==NULL){
                 //Take from Dirty and FIFO B
+                if(debug)
+                  printf("Evicting from Dirty and FIFO on B\n");
                 cur = RemoveFromList(D, D);
                 free(cur);
 
@@ -852,6 +909,8 @@ void VMS(FILE *file, int numFrames)
               }
               else{
                 //Take from Clean
+                if(debug)
+                  printf("Evicting from C and FIFO on B\n");
                 cur = RemoveFromList(C, C);
                 free(cur);
 
@@ -870,10 +929,13 @@ void VMS(FILE *file, int numFrames)
           }
         }
         else {
+          if (debug)
+            printf("Yes\n");
           //It was in Dirty
           //Is B full?
           if(numB < limit){
             //No
+            if(debug)
             temp = RemoveFromList(temp, D);
             B = AddToList(temp, B);
             ++numB;
@@ -1055,77 +1117,3 @@ void UpdateRW(struct Node *node, int *RW, char rw)
     RW[1] += 1;
   }
 }
-/*
-//If not found in A and A has room, add new node at end of list
-			  if (temp == NULL && numA < limit) {
-				  temp = (struct Node*) malloc(sizeof(struct Node));
-				  temp->string = string;
-				  if (rw == 'R')
-					  temp->clean = true;
-				  else if (rw == 'W')
-					  temp->clean = false;
-				  temp->n = NULL;
-				  temp->p = cur;
-				  cur->n = temp;
-				  ++numA;
-			  }
-			  else if (temp == NULL && numA == limit) {
-				  //If not found in A but A has no room
-				  if (numB < limit) {
-					  //Check clean
-					  cur = C;
-					  while (cur->next != NULL) {
-
-					  }
-
-					  //Check Dirty
-
-					  A = A->n;
-					  if (A->clean) {
-						  C = A->p;
-						  C->n = NULL;
-						  A->p = NULL;
-					  }
-					  else {
-						  D = A->p;
-						  D->n = NULL;
-						  A->p = NULL;
-					  }
-
-					  cur = A;
-					  while (cur->n != NULL) {
-						  cur = cur->n;
-					  }
-
-					  temp = (struct Node*) malloc(sizeof(struct Node));
-					  temp->string = string;
-					  temp->n = NULL;
-					  temp->p = cur;
-					  cur->n = temp;
-				  }
-				  else if (numB == limit) {
-					  cur = A;
-					  while (cur->next != NULL) {
-						  cur = cur->n;
-					  }
-
-					  temp = A;
-					  A = A->n;
-					  A->p = NULL;
-
-					  temp->n = NULL;
-					  free(temp);
-
-					  temp = (struct Node*) malloc(sizeof(struct Node));
-					  temp->string = string;
-					  if (rw == 'R')
-						  temp->clean = true;
-					  else if (rw == 'W')
-						  temp->clean = false;
-					  temp->n = false;
-					  temp->p = cur;
-					  cur->n = temp;
-
-				  }
-			  }
-*/
