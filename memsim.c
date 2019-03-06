@@ -20,15 +20,17 @@ struct Node
   struct Node *p;
 };
 
-void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug);
-void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug);
-void VMS(FILE *file, int numFrames, bool debug);
+void LRU(FILE *file, char PageTable[][10], int numFrames);
+void FIFO(FILE *file, char PageTable[][10], int numFrames);
+void VMS(FILE *file, int numFrames);
 
 struct Node *FindLastNode(struct Node *cur);
 struct Node *FindPage(struct Node *cur, char string[10]);
 struct Node *AddToList(struct Node *add, struct Node *list);
 struct Node *RemoveFromList(struct Node *remove, struct Node *list);
 void UpdateRW(struct Node *node, int *RW, char rw);
+
+bool debug;
 
 int main(int argc, char *argv[])
 {
@@ -41,7 +43,7 @@ int main(int argc, char *argv[])
   }
 
   bool first = true;  //Just used for formatting
-  bool debug = false; //Debug Mode
+  debug = false; //Debug Mode
 
   //Determines if the program is in debug mode
   if (strcmp(argv[4], "debug") == 0)
@@ -137,12 +139,16 @@ int main(int argc, char *argv[])
 
   if (LRU_f)
   {
-    LRU(file, PageTable, numFrames, debug);
+    LRU(file, PageTable, numFrames);
   }
 
   if (FIFO_f)
   {
-    FIFO(file, PageTable, numFrames, debug);
+    FIFO(file, PageTable, numFrames);
+  }
+
+  if(VMS_f){
+    VMS(file, numFrames);
   }
 
   fclose(file);
@@ -155,7 +161,7 @@ int main(int argc, char *argv[])
     Takes in the file, the page table, the number of frames and if debug mode is active
   and will perform the Least Recently Used (LRU) replacement algorithm on the page table.
 =======================================================================================*/
-void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug)
+void LRU(FILE *file, char PageTable[][10], int numFrames)
 {
   char string[20]; //string buffer to hold the string
   char rw;         //holds the read or write operation on the address
@@ -188,7 +194,7 @@ void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug)
 
     for (i = 0; i < numFrames; ++i)
     {
-      if (strcmp(PageTable[i], "0") == 0)
+      if (strcmp(PageTable[i], string) == 0)
       {
         present = true;
         index = i;
@@ -300,7 +306,7 @@ void LRU(FILE *file, char PageTable[][10], int numFrames, bool debug)
   //}
 }
 
-void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
+void FIFO(FILE *file, char PageTable[][10], int numFrames)
 {
   char string[20]; //string buffer to hold the string
   char rw;         //holds the read or write operation on the address
@@ -334,7 +340,7 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
 
     for (i = 0; i < numFrames; ++i)
     {
-      if (strcmp(PageTable[i], "0") == 0)
+      if (strcmp(PageTable[i], string) == 0)
       {
         present = true;
         index = i;
@@ -441,11 +447,11 @@ void FIFO(FILE *file, char PageTable[][10], int numFrames, bool debug)
   //}
 }
 
-void VMS(FILE *file, int numFrames, bool debug)
+void VMS(FILE *file, int numFrames)
 {
-  if (numFrames < 4)
+  if (numFrames % 2 != 0)
   {
-    printf("Error: Cannot perform this action with less than 4 frames.\n");
+    printf("Error: Cannot perform this action with an odd number of frames.\n");
     return;
   }
 
@@ -477,71 +483,126 @@ void VMS(FILE *file, int numFrames, bool debug)
   int total = numFrames;
   while (fscanf(file, "%s %c", &string, &rw) != EOF)
   {
+    if(debug){
+      printf("\nEvent %d: %c on \'%s\'\n", eventCounter, rw, string);
+    }
     //If this address belongs to process 1
     if (string[0] == '3')
     {
+      if(debug){
+        printf("This belongs to Process A\n");
+      }
       //If List A is empty
       if (A == NULL)
       {
+        if(debug){
+          printf("A is empty\n");
+        }
         //Create a new node with the string
         A = (struct Node *)malloc(sizeof(struct Node));
+        
+        if(debug){
+          printf("Created a new node\n");
+        }
+
         strcpy(A->string, string);
-        A = AddToList(A, A);
+        if(debug){
+          printf("Returned from Adding to the list\n");
+        }
 
         //Update the clean or dirty bit
         UpdateRW(A, RW, rw);
 
         ++numA;
         --total;
+        ++eventCounter;
+        continue;
       }
       else
       {
         //Search the elements in A to find the string
         temp = FindPage(A, string);
-
+        
+        if(debug)
+          printf("Was it in A? >");
         //Not in A, search Clean
         if (temp == NULL)
         {
+          if(debug){
+            printf("No, checking in Clean now\n");
+          }
           temp = FindPage(C, string);
         }
         else
         {
+          if(debug)
+            printf("Yes\n");
           //It was in A
           ++pageHits;
           UpdateRW(A, RW, rw);
+          ++eventCounter;
+          continue;
         }
 
         //Search Dirty for element
+        if(debug)
+          printf("Is it in clean? >");
         if (temp == NULL)
         {
+          if(debug)
+            printf("No, checking Dirty now\n");
           temp = FindPage(D, string);
         }
         else
         {
+          printf("Yes\n");
           //It was in clean
           //Is A at the limit?
           //No - Add to the end of A
           if (numA < limit)
           {
+            if(debug){
+              printf("%d / %d in A\n", numA, limit);
+            }
+
+            if(debug)
+              printf("Removing it from Clean\n");
             cur = RemoveFromList(temp, C);
+
+            if(debug)
+              printf("Adding it to A\n");
             A = AddToList(cur, A);
             ++numA;
+            UpdateRW(cur, RW, rw);
           }
           else
           {
             //Yes - FIFO A
+            if(debug)
+              printf("A is full\nRemoving The first from A");
             cur = RemoveFromList(A, A);
+
+            if(debug)
+              printf("Adding the removed page to ");
             if (cur->clean)
             {
+              if(debug)
+                printf("CLEAN\n");
               C = AddToList(cur, C);
             }
             else
             {
+              if(debug)
+                printf("DIRTY\n");
               D = AddToList(cur, D);
             }
             temp = RemoveFromList(temp, C);
             temp = AddToList(temp, A);
+            UpdateRW(temp, RW, rw);
           }
+
+          ++eventCounter;
+          continue;
         }
 
         //It was not in Dirty
@@ -653,24 +714,193 @@ void VMS(FILE *file, int numFrames, bool debug)
             {
               D = AddToList(cur, D);
             }
+
+            UpdateRW(temp, RW, rw);
+          }
+        }
+      }
+      ++eventCounter;
+      continue;
+    }
+    //This is a B Process
+    //Is B empty?
+    else{
+       if(debug)
+          printf("This process belongs to B\n");
+
+      if (B == NULL)
+      {
+        //Yes
+        if(debug)
+          printf("B is empty\n");
+        B = (struct Node *)malloc(sizeof(struct Node));
+        strcpy(B->string, string);
+        UpdateRW(B, RW, rw);
+        ++numB;
+        --total;
+        ++eventCounter;
+        continue;
+      }
+      else{
+        if(debug)
+          printf("B is not empty\n");
+        temp = FindPage(B, string);
+
+        //Is the page in the list?
+        if(temp == NULL){
+          //No- Check for it in Clean
+          temp = FindPage(C, string);
+        }
+        else{
+          //Yes - It is in the list
+          ++pageHits;
+          UpdateRW(temp, RW, rw);
+          ++eventCounter;
+          continue;
+        }
+
+        //Is it in Clean?
+        if(temp == NULL){
+          //No - Check Dirty
+          temp = FindPage(D, string);
+        }
+        else{
+          //It is in Clean
+          //Is B full?
+          if(numB < limit){
+            //No
+            temp = RemoveFromList(temp, C);
+            B = AddToList(temp, B);
+            UpdateRW(temp, RW, rw);
+            ++eventCounter;
+            continue;
+          }
+          else{
+            //Yes
+            temp = RemoveFromList(temp, C);
+            cur = RemoveFromList(B, B);
+            B = AddToList(temp, B);
+
+            if(cur->clean){
+              C = AddToList(cur, C);
+            }
+            else{
+              D = AddToList(cur, D);
+            }
+            UpdateRW(temp, RW, rw);
+            ++eventCounter;
+            continue;
+          }
+        }
+          //Is it in Dirty?
+        if(temp == NULL){
+          //No
+          temp = (struct Node*) malloc (sizeof(struct Node));
+          strcpy(temp->string, string);
+          UpdateRW(temp, RW, rw);
+          --total;
+
+          //Is B full?
+          if(numB < limit){
+            //No - add at the end of the list
+            B = AddToList(temp, B);
+            ++eventCounter;
+            ++numB;
+            continue;
+          }
+          else{
+            //B is full- Is there room in the table?
+            if(total > 0){
+              //Yes
+              cur = RemoveFromList(B, B);
+              B = AddToList(temp,B);
+
+              if(cur->clean){
+                C = AddToList(cur, C);
+              }
+              else{
+                D = AddToList(cur, D);
+              }
+            }
+            else{
+              //There is no room on the table
+              //If C and D are empty, FIFO B
+              if(C == NULL && D == NULL){
+                cur = RemoveFromList(B, B);
+                free (cur);
+                B = AddToList(temp, B);
+                ++eventCounter;
+                continue;
+              }
+              else if( C==NULL){
+                //Take from Dirty and FIFO B
+                cur = RemoveFromList(D, D);
+                free(cur);
+
+                cur = RemoveFromList(B,B);
+                B = AddToList(temp, B);
+
+                if(cur->clean){
+                  C = AddToList(cur, C);
+                }
+                else{
+                  D = AddToList(cur, D);
+                }
+
+                ++eventCounter;
+                continue;
+              }
+              else{
+                //Take from Clean
+                cur = RemoveFromList(C, C);
+                free(cur);
+
+                cur = RemoveFromList(B, B);
+                B = AddToList(temp, B);
+                if(cur->clean){
+                  C = AddToList(cur, C);
+                }
+                else{
+                  D = AddToList(cur, D);
+                }
+                ++eventCounter;
+                continue;
+              }
+            }
+          }
+        }
+        else {
+          //It was in Dirty
+          //Is B full?
+          if(numB < limit){
+            //No
+            temp = RemoveFromList(temp, D);
+            B = AddToList(temp, B);
+            ++numB;
+            ++eventCounter;
+            continue;
+          }
+          else{
+            //B is full
+            temp = RemoveFromList(temp, D);
+            cur = RemoveFromList(B, B);
+
+            B = AddToList(temp, B);
+
+            if(cur->clean){
+              C = AddToList(cur, C);
+            }
+            else{
+              D = AddToList(cur, D);
+            }
+            ++eventCounter;
+            continue;
+          
           }
         }
       }
     }
-    //This is a B Process
-    //Is B empty?
-    if (B == NULL)
-    {
-      //Yes
-      B = (struct Node *)malloc(sizeof(struct Node));
-      strcpy(B->string, string);
-      UpdateRW(B, RW, rw);
-      ++numB;
-      --total;
-    }
-    ++eventCounter;
   }
-
   printf("total memory frames: %d\n", numFrames);
   printf("events in trace: %d\n", eventCounter);
   printf("total disk reads: %d\n", RW[0]);
@@ -686,40 +916,74 @@ void VMS(FILE *file, int numFrames, bool debug)
 
 struct Node *FindLastNode(struct Node *cur)
 {
+  if(debug){
+    printf("\nFIND_LAST_NODE::Entered\n");
+  }
   if (cur == NULL)
   {
+    if(debug){
+      printf("\tList is empty\n");
+    }
     return cur;
   }
+
+  if(debug)
+    printf("\tList is not empty\n\t");
+  
   while (cur->n != NULL)
   {
+    if(debug)
+      printf("SEARCHING--");
     cur = cur->n;
   }
+  if(debug)
+    printf("FOUND!\n");
   return cur;
 }
 
-struct Node *FindPage(struct Node *cur, char string[10])
+struct Node *FindPage(struct Node *list, char string[10])
 {
+  if(debug)
+    printf("\nFIND_PAGE::Entered\n");
+
+  struct Node* cur = list;
+
   if (cur == NULL)
   {
+    printf("\tThis list is currently empty\n");
     return cur;
   }
 
+  if(debug)
+    printf("\t");
   while (cur != NULL)
   {
+    if(debug)
+      printf("Searching--");
     if (strcmp(cur->string, string) == 0)
     {
+      if(debug)
+        printf("FOUND!\n");
       return cur;
     }
     cur = cur->n;
   }
 
+  if(debug)
+    printf("Couldn't find the page\n");
   return cur;
 }
 
 struct Node *AddToList(struct Node *add, struct Node *list)
 {
+  if(debug){
+    printf("\nADD_TO_LIST::\'%s\' to list\n", add->string);
+  }
   if (list == NULL)
   {
+    if(debug){
+      printf("\tList is empty\n");
+    }
     list = add;
     list->n = NULL;
     list->p = NULL;
@@ -727,23 +991,32 @@ struct Node *AddToList(struct Node *add, struct Node *list)
   else
   {
     struct Node *cur = FindLastNode(list);
+    
+    if(debug)
+      printf("\nADD_TO_LIST:: Returned from FindLastNode()\n");
+
     cur->n = add;
     add->n = NULL;
     add->p = cur;
   }
-
   return list;
 }
 
 struct Node *RemoveFromList(struct Node *remove, struct Node *list)
 {
+  if(debug)
+    printf("\nREMOVE_FROM_LIST::Entered\n");
   if (remove->p == NULL && remove->n == NULL)
   {
+    if(debug)
+      printf("\tThis list is now empty\n");
     list = remove->n;
     return remove;
   }
   else if (remove->p == NULL)
   {
+    if(debug)
+      printf("\tRemoving the first element of this list\n");
     list = remove->n;
     remove->n = NULL;
     list->p = NULL;
@@ -751,12 +1024,16 @@ struct Node *RemoveFromList(struct Node *remove, struct Node *list)
   }
   else if (remove->n == NULL)
   {
+    if(debug)
+      printf("\tRemoving the last element of this list\n");
     remove->p->n = NULL;
     remove->p = NULL;
     return remove;
   }
   else
   {
+    if(debug)
+      printf("\tRemoving an element from the list\n");
     remove->p->n = remove->n;
     remove->n->p = remove->p;
     remove->p = NULL;
